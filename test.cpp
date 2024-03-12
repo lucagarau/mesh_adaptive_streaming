@@ -238,7 +238,8 @@ int main(int argc, char **argv)
         }
     }
 
-   //todo aggiungere scrittura su file csv
+    writeToFile(csv_path, ris);
+
 
     //Pulizia della cartella temporanea
     fs::remove_all(tempDir);
