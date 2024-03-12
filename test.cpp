@@ -3,6 +3,8 @@
 #include <cinolib/gl/glcanvas.h>
 #include <filesystem>
 #include <iostream>
+#include <fstream>
+#include <mutex>
 
 //#define INPUT_PATH R"(C:\Users\luca-\OneDrive\Data\progetti\Borsa\lib\common-3d-test-models\data)"
 //#define INPUT_PATH R"(C:\Users\luca-\OneDrive\Data\progetti\Borsa\cinomuletto\meshes\test)"
@@ -43,6 +45,26 @@ struct results{
     double polyLoss = 0.0;
 
 };
+
+// Definizione del mutex globale per sincronizzare l'accesso al file
+std::mutex fileMutex;
+
+void writeToFile(const std::string& csv_path, const results& ris) {
+    // Bloccare il mutex prima di accedere al file
+    std::lock_guard<std::mutex> lock(fileMutex);
+
+    // Aprire il file in modalità di append
+    std::ofstream file(csv_path, std::ios::app);
+    if(file.is_open()) {
+        // Scrivere i dati nel file
+        file << ris.model << ";" << ris.sizeOriginal << ";" << ris.vertOriginal << ";" << ris.edgesOriginal << ";" << ris.polyOriginal << ";" << ris.sizeCompressed << ";" << ris.cl << ";" << ris.qp << ";" << ris.sizeDecompressed << ";" << ris.vertDecompressed << ";" << ris.edgesDecompressed << ";" << ris.polyDecompressed << ";" << ris.sizeLoss << ";" << ris.vertLoss << ";" << ris.edgesLoss << ";" << ris.polyLoss << std::endl;
+        // Chiudere il file
+        file.close();
+    } else {
+        // Gestire eventuali errori nell'apertura del file
+        std::cerr << "Errore nell'apertura del file: " << csv_path << std::endl;
+    }
+}
 
 int main(int argc, char **argv)
 {
@@ -216,10 +238,7 @@ int main(int argc, char **argv)
         }
     }
 
-    std::ofstream file(csv_path, std::ios::app);
-    if(file.is_open()){
-        file << ris.model << ";" << ris.sizeOriginal << ";" << ris.vertOriginal << ";" << ris.edgesOriginal << ";" << ris.polyOriginal << ";" << ris.sizeCompressed << ";" << ris.cl << ";" << ris.qp << ";" << ris.sizeDecompressed << ";" << ris.vertDecompressed << ";" << ris.edgesDecompressed << ";" << ris.polyDecompressed << ";" << ris.sizeLoss << ";" << ris.vertLoss << ";" << ris.edgesLoss << ";" << ris.polyLoss << std::endl;
-        file.close();}
+   //todo aggiungere scrittura su file csv
 
     //Pulizia della cartella temporanea
     fs::remove_all(tempDir);
