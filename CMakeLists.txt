@@ -1,0 +1,10 @@
+cmake_minimum_required(VERSION 3.2)
+project(test_compressione)
+set (CMAKE_CXX_STANDARD 17)
+
+set(cinolib_DIR "C:\\Users\\luca-\\OneDrive\\Data\\progetti\\Borsa\\lib\\cinolib")
+set(CINOLIB_USES_OPENGL_GLFW_IMGUI ON)
+set(CINOLIB_USES_SHEWCHUK_PREDICATES ON)
+find_package(cinolib REQUIRED)
+add_executable(${PROJECT_NAME} test.cpp)
+target_link_libraries(${CMAKE_PROJECT_NAME} cinolib)
