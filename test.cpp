@@ -5,6 +5,7 @@
 #include <iostream>
 #include <fstream>
 #include <mutex>
+#include <chrono>
 
 //#define INPUT_PATH R"(C:\Users\luca-\OneDrive\Data\progetti\Borsa\lib\common-3d-test-models\data)"
 //#define INPUT_PATH R"(C:\Users\luca-\OneDrive\Data\progetti\Borsa\cinomuletto\meshes\test)"
@@ -29,11 +30,13 @@ struct results{
 
     //file compresso
     uintmax_t sizeCompressed = 0;
+    double compressionTime = 0.0;
     int cl = 10;
     int qp= 11;
 
     //file decompresso
     uintmax_t sizeDecompressed = 0;
+    double decompressionTime = 0.0;
     uint vertDecompressed = 0;
     uint edgesDecompressed = 0;
     uint polyDecompressed = 0;
@@ -49,15 +52,26 @@ struct results{
 // Definizione del mutex globale per sincronizzare l'accesso al file
 std::mutex fileMutex;
 
+//todo aggiornare la scrittura su file
 void writeToFile(const std::string& csv_path, const results& ris) {
     // Bloccare il mutex prima di accedere al file
     std::lock_guard<std::mutex> lock(fileMutex);
+
+    //Scrittura dei risultati su file csv
+    //se la prima riga è vuota allora scrivo l'header
+    if(fs::is_empty(csv_path)){
+        std::ofstream file(csv_path, std::ios::app);
+        if(file.is_open()){
+            file << "model;size_orig;nume_vtx_orig;num_edge_orig;num_poly_orig;compression_time_ms;size_compr;param_cl;param_qp;decompression_time_ms;size_deco;num_vtx_deco;num_edge_deco;num_poly_deco;compression_ratio;vtx_loss;edge_loss;poly_loss" << std::endl;
+            file.close();
+        }
+    }
 
     // Aprire il file in modalità di append
     std::ofstream file(csv_path, std::ios::app);
     if(file.is_open()) {
         // Scrivere i dati nel file
-        file << ris.model << ";" << ris.sizeOriginal << ";" << ris.vertOriginal << ";" << ris.edgesOriginal << ";" << ris.polyOriginal << ";" << ris.sizeCompressed << ";" << ris.cl << ";" << ris.qp << ";" << ris.sizeDecompressed << ";" << ris.vertDecompressed << ";" << ris.edgesDecompressed << ";" << ris.polyDecompressed << ";" << ris.sizeLoss << ";" << ris.vertLoss << ";" << ris.edgesLoss << ";" << ris.polyLoss << std::endl;
+        file << ris.model << ";" << ris.sizeOriginal << ";" << ris.vertOriginal << ";" << ris.edgesOriginal << ";" << ris.polyOriginal << ";" << ris.compressionTime << ";" << ris.sizeCompressed << ";" << ris.cl << ";" << ris.qp << ";" << ris.decompressionTime << ";" << ris.sizeDecompressed << ";" << ris.vertDecompressed << ";" << ris.edgesDecompressed << ";" << ris.polyDecompressed << ";" << ris.sizeLoss << ";" << ris.vertLoss << ";" << ris.edgesLoss << ";" <<ris.polyLoss << std::endl;
         // Chiudere il file
         file.close();
     } else {
@@ -204,21 +218,34 @@ int main(int argc, char **argv)
     ris.edgesOriginal = m_originale.num_edges();
     ris.polyOriginal = m_originale.num_polys();
 
+    auto start = std::chrono::high_resolution_clock::now();
     //compressione del modello
     command = "draco_encoder -i " + filename + " -o " + com_path + " -cl " + std::to_string(cl) + " -qp " + std::to_string(qp);
     system(command.c_str());
+    auto end = std::chrono::high_resolution_clock::now();
+
     ris.sizeCompressed = fs::directory_entry(com_path).file_size();
     ris.cl = cl;
     ris.qp = qp;
 
+    //calcolo tempo di compressione
+    std::chrono::duration<double,std::milli > elapsed = end-start;
+    ris.compressionTime = elapsed.count();
+
     //decompressione del modello
+    start = std::chrono::high_resolution_clock::now();
     command = "draco_decoder -i " + com_path + " -o " + deco_path;
     system(command.c_str());
+    end = std::chrono::high_resolution_clock::now();
+
     DrawableTrimesh<> m_decompressa(std::string(deco_path).c_str());
     ris.sizeDecompressed = fs::directory_entry(deco_path).file_size();
     ris.vertDecompressed = m_decompressa.num_verts();
     ris.edgesDecompressed = m_decompressa.num_edges();
     ris.polyDecompressed = m_decompressa.num_polys();
+
+    elapsed = end-start;
+    ris.decompressionTime = elapsed.count();
 
     //calcolo percentuale di perdita di informazioni
 
@@ -228,21 +255,33 @@ int main(int argc, char **argv)
     ris.polyLoss = 100.0 - ((double)ris.polyDecompressed * 100 / (double)ris.polyOriginal);
 
 
-    //Scrittura dei risultati su file csv
-    //se la prima riga è vuota allora scrivo l'header
-    if(fs::is_empty(csv_path)){
-        std::ofstream file(csv_path, std::ios::app);
-        if(file.is_open()){
-            file << "model;sizeOriginal;vertOriginal;edgesOriginal;polyOriginal;sizeCompressed;cl;qp;sizeDecompressed;vertDecompressed;edgesDecompressed;polyDecompressed;sizeLoss;vertLoss;edgesLoss;polyLoss" << std::endl;
-            file.close();
-        }
-    }
+    //todo modificare intestazione file
+
 
     writeToFile(csv_path, ris);
 
 
     //Pulizia della cartella temporanea
-    fs::remove_all(tempDir);
+    //fs::remove_all(tempDir);
+
+    // Verifica se il file esiste prima di tentare di rimuoverlo
+    if (fs::exists(com_path)) {
+        try {
+            fs::remove(com_path); // Rimuove il file
+            std::cout << "File rimosso con successo." << std::endl;
+        } catch (const std::filesystem::filesystem_error& err) {
+            std::cerr << "Errore durante la rimozione del file: " << err.what() << std::endl;
+        }
+    }
+    // Verifica se il file esiste prima di tentare di rimuoverlo
+    if (fs::exists(deco_path)) {
+        try {
+            fs::remove(deco_path); // Rimuove il file
+            std::cout << "File rimosso con successo." << std::endl;
+        } catch (const std::filesystem::filesystem_error& err) {
+            std::cerr << "Errore durante la rimozione del file: " << err.what() << std::endl;
+        }
+    }
 
     return 0;
 }
